@@ -1595,7 +1595,7 @@ class LoadModel:
         if self.model_type == "M1600":
             return self.create_m1600_vehicle(self.gap)
         elif self.model_type == "CLASS70R":
-            return self.create_class70r_vehicle()
+            return self.create_class70r_W_vehicle()
 
     def create_m1600_vehicle(self, gap):
         """
