@@ -7,17 +7,21 @@ module of OpenSeesPy - this module fills in gaps to
 * plot force and deflection diagrams from xarray DataSets
 """
 
-import matplotlib.pyplot as plt
-import opsvis as opsv
+import importlib
 import numpy as np
-from typing import TYPE_CHECKING, Union
-from scipy.interpolate import interpn, RegularGridInterpolator
 
-# if TYPE_CHECKING:
 from ospgrillage.load import ShapeFunction
 from ospgrillage.utils import solve_zeta_eta
 
-import vfo.vfo as opsplt
+
+def _import_optional_dependency(module_name: str, install_hint: str):
+    """Import optional modules at call time to keep base imports lightweight."""
+    try:
+        return importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            f"Missing optional dependency '{module_name}'. Install with {install_hint}."
+        ) from exc
 
 
 def create_envelope(**kwargs):
@@ -213,6 +217,11 @@ def plot_force(
     :return: Matplotlib figure
     :rtype: (:class:`~matplotlib.figure.Figure`)
     """
+    plt = _import_optional_dependency("matplotlib.pyplot", "`pip install matplotlib`")
+    opsv = _import_optional_dependency(
+        "opsvis", "`pip install ospgrillage[visualization]`"
+    )
+
     # instantiate component dict
     comp_dict = {"Fx": 0, "Fy": 1, "Fz": 2, "Mx": 3, "My": 4, "Mz": 5}
     comp_factor = {"Fx": 1, "Fy": 1, "Fz": 1, "Mx": 1, "My": 1, "Mz": -1}
@@ -344,6 +353,8 @@ def plot_defo(
     :return: Matplotlib figure
     :rtype: (:class:`~matplotlib.figure.Figure`)
     """
+    plt = _import_optional_dependency("matplotlib.pyplot", "`pip install matplotlib`")
+
     # init vars
     previous_def = None
     previous_xx = None
@@ -464,7 +475,7 @@ class PostProcessor:
             x4=x[3],
             z4=z[3],
         )
-        if shape_function_type is "linear":
+        if shape_function_type == "linear":
             shape_func = self.shape_function_obj.linear_shape_function(
                 eta=eta, zeta=zeta
             )

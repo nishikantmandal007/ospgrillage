@@ -10,7 +10,21 @@ from datetime import datetime
 from itertools import combinations
 from typing import List, Tuple, TYPE_CHECKING
 
-import openseespy.opensees as ops
+try:
+    import openseespy.opensees as ops
+except ModuleNotFoundError as exc:
+    _OPENSEES_IMPORT_ERROR = exc
+
+    class _OpenSeesProxy:
+        """Proxy to defer dependency errors until OpenSees APIs are actually used."""
+
+        def __getattr__(self, _name):
+            raise ModuleNotFoundError(
+                "openseespy is required for model creation and analysis. "
+                "Install with `pip install openseespy`."
+            ) from _OPENSEES_IMPORT_ERROR
+
+    ops = _OpenSeesProxy()
 
 from ospgrillage.load import *
 from ospgrillage.mesh import *
@@ -355,8 +369,7 @@ class OspGrillage:
             file_handle.write("# Constructed on:{}\n".format(dt_string))
             # necessary imports
             file_handle.write(
-                "import numpy as np\nimport math\nimport openseespy.opensees as ops"
-                "\nimport vfo.vfo as opsplt\n"
+                "import numpy as np\nimport math\nimport openseespy.opensees as ops\n"
             )
 
     # interface function
@@ -2645,8 +2658,7 @@ class Analysis:
                 file_handle.write("# Constructed on:{}\n".format(dt_string))
                 # write imports
                 file_handle.write(
-                    "import numpy as np\nimport math\nimport openseespy.opensees as ops"
-                    "\nimport vfo.vfo as opsplt\n"
+                    "import numpy as np\nimport math\nimport openseespy.opensees as ops\n"
                 )
 
     def _time_series_command(self, load_factor):

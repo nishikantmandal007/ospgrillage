@@ -5,8 +5,8 @@ Installation
 Required dependencies
 ----------------------
 
-* Python (3.8 or later)
-* Openseespy (3.3 or later)
+* Python (3.10 or later)
+* OpenSeesPy (3.2.2.6 or later)
 * numpy
 * xarray
 
@@ -19,13 +19,19 @@ The easiest way to install is to use python package index `pip`.
 
     pip install ospgrillage
 
+For plotting helpers that depend on ``opsvis``/``vfo``, install optional visualization extras:
+
+.. code-block:: python
+
+    pip install "ospgrillage[visualization]"
+
 For users wishing to develop/contribute, install as follows:
 
 .. code-block:: python
 
     git clone https://github.com/MonashSmartStructures/ospgrillage.git
     cd ospgrillage
-    pip setup.py install -e
+    python -m pip install -e .
 
 For users wishing to use jupyter notebook, install as follows:
 
@@ -44,7 +50,7 @@ The following instructions are for jupyter notebook but with virtual environment
 
 .. code-block:: python
 
-    1. Create a new environment: conda create --name ospg python=3.9
+    1. Create a new environment: conda create --name ospg python=3.12
     2. Now activate the new env: conda activate ospg
     3. Install jupyter-lab: conda install -c conda-forge jupyterlab
     4. Install the kernels for linking with jupyter: pip install ipykernel followed by: ipython kernel install --name "opsg" --user
@@ -55,7 +61,7 @@ Installing dependencies
 ------------------------
 
 Dependencies are automatically installed when using :code:`pip`.
-The dependencies can be seen in the *setup.cfg* file in the project repository.
+The dependencies are defined in ``pyproject.toml`` in the project repository.
 
 Tests
 -------------------
@@ -65,4 +71,3 @@ to tests all modules.
 .. code-block:: python
 
     python -m pytest
-

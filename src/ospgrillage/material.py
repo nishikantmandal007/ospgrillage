@@ -6,6 +6,7 @@ This module contains the user interface function and class to manage
 """
 
 import json
+from pathlib import Path
 
 
 def create_material(**kwargs):
@@ -105,7 +106,10 @@ class Material:
 
         # get mat lib file
         self.default_mat = kwargs.get("default_material", True)
-        self._mat_lib = self._read_mat_lib()
+        self._mat_lib_path = self._resolve_mat_lib_path(
+            kwargs.get("mat_lib_path", None)
+        )
+        self._mat_lib = self._read_mat_lib(self._mat_lib_path)
         # ----------------------------------------------------------------------------------
         # material vars
 
@@ -261,7 +265,19 @@ class Material:
         return mat_lib
 
     @staticmethod
-    def _write_mat_lib(mat_lib):
+    def _resolve_mat_lib_path(mat_lib_path=None):
+        """Resolve material library path with backward-compatible search order."""
+        if mat_lib_path is not None:
+            return Path(mat_lib_path).expanduser()
+
+        local_mat_lib = Path.cwd() / "mat_lib.json"
+        if local_mat_lib.exists():
+            return local_mat_lib
+
+        return Path(__file__).with_name("mat_lib.json")
+
+    @staticmethod
+    def _write_mat_lib(mat_lib, path):
         """
         Write out the passed material dict
         Not to be used in the ordinary course of events at risk of overwriting
@@ -269,21 +285,26 @@ class Material:
         Used for initial creation of the mat_lib
         """
 
-        with open("mat_lib.json", "w") as f:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as f:
             json.dump(mat_lib, f, indent=4)
 
-    def _read_mat_lib(self):
+    def _read_mat_lib(self, path):
         """
         Read material library from json file
         """
         mat_lib = {}
+        path = Path(path)
         try:
-            with open("mat_lib.json", "r") as f:
+            with path.open("r", encoding="utf-8") as f:
                 mat_lib = json.load(f)
-        except (FileNotFoundError, IOError):
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
             print("Material library unable to be read\nUsing default library")
             mat_lib = self._create_default_dict()
-            self._write_mat_lib(mat_lib)
+            package_mat_lib = Path(__file__).with_name("mat_lib.json")
+            if path != package_mat_lib:
+                self._write_mat_lib(mat_lib, path)
         return mat_lib
 
     def get_ops_material_command(self, material_tag):
