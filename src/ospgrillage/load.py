@@ -1589,15 +1589,20 @@ class LoadModel:
 
         Notes
         -----
-        Currently supports "M1600" (Australian Standard AS5100).
-        Additional load models can be added by implementing new create_* methods.
+        Currently supports "M1600" (Australian Standard AS5100) plus
+        "CLASSA" and "CLASS70R" (IRC wheeled vehicles).
         """
         if self.model_type == "M1600":
             return self.create_m1600_vehicle(self.gap)
-        elif self.model_type == "CLASSA":
+        if self.model_type == "CLASSA":
             return self.create_classA_vehicle()
-        elif self.model_type == "CLASS70R":
+        if self.model_type == "CLASS70R":
             return self.create_class70r_vehicle()
+
+        raise ValueError(
+            f"Unsupported load model type {self.model_type!r}. "
+            "Supported model types are: M1600, CLASSA, CLASS70R."
+        )
 
     def create_m1600_vehicle(self, gap):
         """
@@ -1647,18 +1652,58 @@ class LoadModel:
                 M1600_vehicle.add_load(point)
 
         return M1600_vehicle
-    
+
+    def _create_wheeled_vehicle(
+        self,
+        *,
+        vehicle_name,
+        point_name,
+        axle_positions_x,
+        wheel_positions_z,
+        axle_loads,
+    ):
+        """
+        Build a wheeled vehicle as a compound load from axle and wheel geometry.
+
+        ``axle_loads`` are interpreted as total load per axle and are distributed
+        evenly across the wheels defined by ``wheel_positions_z``.
+        """
+        if len(axle_positions_x) != len(axle_loads):
+            raise ValueError(
+                "Axle position count must match axle load count for vehicle "
+                f"{vehicle_name!r}."
+            )
+
+        load_positions_x = [x + self.x_offset for x in axle_positions_x]
+        load_positions_z = [z + self.z_offset for z in wheel_positions_z]
+        per_wheel_divisor = len(load_positions_z)
+        vehicle = create_compound_load(name=vehicle_name)
+
+        for axle_index, x_pos in enumerate(load_positions_x):
+            axle_load = axle_loads[axle_index]
+            for z_pos in load_positions_z:
+                vert = create_load_vertex(
+                    x=x_pos,
+                    z=z_pos,
+                    p=axle_load / per_wheel_divisor,
+                )
+                point = create_load(
+                    loadtype="point",
+                    name=point_name,
+                    point1=vert,
+                )
+                vehicle.add_load(point)
+
+        return vehicle
+
     def create_class70r_vehicle(self):
         """
         IRC Class 70R wheeled vehicle (Clause 204.1)
-        Returns a CompoundLoad in local coordinates
+        Returns a CompoundLoad in local coordinates.
         """
-
-        # Units
         m = 1
         kN = 1e3
 
-        # Geometry (as provided by you)
         front_gap = 0.81 * m
         axle_dist1 = 3.960 * m
         axle_dist2 = 1.520 * m
@@ -1667,19 +1712,17 @@ class LoadModel:
         bogie_axle_dist2 = 3.050 * m
         rear_gap = 0.91 * m
 
-        # Wheel loads per axle (kN → N)
         wheel_loads = [
-            8 * kN,
-            12 * kN,
-            12 * kN,
-            17 * kN,
-            17 * kN,
-            17 * kN,
-            17 * kN,
+            80 * kN,
+            120 * kN,
+            120 * kN,
+            170 * kN,
+            170 * kN,
+            170 * kN,
+            170 * kN,
         ]
-
         # Longitudinal axle positions
-        load_positions_x = [
+        axle_positions_x = [
             front_gap,
             front_gap + axle_dist1,
             front_gap + axle_dist1 + axle_dist2,
@@ -1689,44 +1732,22 @@ class LoadModel:
             front_gap + axle_dist1 + axle_dist2 + gap_bogie + bogie_axle_dist1 + bogie_axle_dist2 + rear_gap,
         ]
 
-        # Apply global offsets
-        load_positions_x = [x + self.x_offset for x in load_positions_x]
-
-        # Wheel track width
-        load_positions_z = [-0.965, 0.965]
-        load_positions_z = [z + self.z_offset for z in load_positions_z]
-
-        # Create compound load
-        Class70R_vehicle = create_compound_load(name="Class 70R Vehicle")
-
-        # Create point loads
-        for axle_index, x in enumerate(load_positions_x):
-            for z in load_positions_z:
-                vert = create_load_vertex(
-                    x=x,
-                    z=z,
-                    p=wheel_loads[axle_index] / 2  # split axle load into two wheels
-                )
-                point = create_load(
-                    loadtype="point",
-                    name="Class70R wheel",
-                    point1=vert
-                )
-                Class70R_vehicle.add_load(load_obj=point)
-
-        return Class70R_vehicle
+        return self._create_wheeled_vehicle(
+            vehicle_name="Class 70R Vehicle",
+            point_name="Class70R wheel",
+            axle_positions_x=axle_positions_x,
+            wheel_positions_z=[-0.965, 0.965],
+            axle_loads=wheel_loads,
+        )
 
     def create_classA_vehicle(self):
         """
         IRC Class A wheeled vehicle (Clause 204.1)
-        Returns a CompoundLoad in local coordinates
+        Returns a CompoundLoad in local coordinates.
         """
-
-        # Units
         m = 1
         kN = 1e3
 
-        # Geometry
         front_gap = 0.6 * m
         axle_dist1 = 1.100 * m
         axle_dist2 = 3.200 * m
@@ -1735,20 +1756,18 @@ class LoadModel:
         bogie_axle_dist = 3.000 * m
         rear_gap = 0.900 * m
 
-        # Wheel loads per axle (kN → N)
         wheel_loads = [
-            2.7 * kN,
-            2.7 * kN,
-            11.4 * kN,
-            11.4 * kN,
-            6.8 * kN,
-            6.8 * kN,
-            6.8 * kN,
-            6.8 * kN,
+            27 * kN,
+            27 * kN,
+            114 * kN,
+            114 * kN,
+            68 * kN,
+            68 * kN,
+            68 * kN,
+            68 * kN,
         ]
 
-        # Longitudinal axle positions
-        load_positions_x = [
+        axle_positions_x = [
             front_gap,
             front_gap + axle_dist1,
             front_gap + axle_dist1 + axle_dist2,
@@ -1759,32 +1778,13 @@ class LoadModel:
             front_gap + axle_dist1 + axle_dist2 + axle_dist3 + gap_bogie + 3 * bogie_axle_dist + rear_gap,
         ]
 
-        # Apply global offsets
-        load_positions_x = [x + self.x_offset for x in load_positions_x]
-
-        # Wheel track width
-        load_positions_z = [-0.9, 0.9]
-        load_positions_z = [z + self.z_offset for z in load_positions_z]
-
-        # Create compound load
-        ClassA_vehicle = create_compound_load(name="Class A Vehicle")
-
-        # Create point loads
-        for axle_index, x in enumerate(load_positions_x):
-            for z in load_positions_z:
-                vert = create_load_vertex(
-                    x=x,
-                    z=z,
-                    p=wheel_loads[axle_index] / 2  # split axle load into two wheels
-                )
-                point = create_load(
-                    loadtype="point",
-                    name="ClassA wheel",
-                    point1=vert
-                )
-                ClassA_vehicle.add_load(load_obj=point)
-
-        return ClassA_vehicle
+        return self._create_wheeled_vehicle(
+            vehicle_name="Class A Vehicle",
+            point_name="ClassA wheel",
+            axle_positions_x=axle_positions_x,
+            wheel_positions_z=[-0.9, 0.9],
+            axle_loads=wheel_loads,
+        )
     
 # ---------------------------------------------------------------------------------------------------------------
 class ShapeFunction:

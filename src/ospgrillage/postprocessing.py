@@ -555,6 +555,14 @@ def _extract_shell_contour_data(result_obj, component, loadcase=None, *, averagi
             f"Expected one of {_SHELL_COMPONENTS}."
         )
 
+    loadcase_label = (
+        loadcase
+        if loadcase is not None
+        else str(result_obj.coords["Loadcase"].values[0])
+        if "Loadcase" in result_obj.coords
+        else "<default>"
+    )
+
     columns = _SHELL_COMP_COLUMNS[component]
     forces = result_obj["forces_shell"]
     ele_nodes = result_obj["ele_nodes_shell"]
@@ -581,14 +589,30 @@ def _extract_shell_contour_data(result_obj, component, loadcase=None, *, averagi
         # Extract the component value at each node of this element
         col_subset = columns[: len(tags)]
         vals = forces.sel(Element=ele, Component=col_subset).values.flatten()
-        for tag, val in zip(tags, vals):
-            accum[tag].append(float(val))
+        finite_pairs = [
+            (tag, float(val))
+            for tag, val in zip(tags, vals)
+            if np.isfinite(val)
+        ]
+        if not finite_pairs:
+            raise ValueError(
+                f"Shell contour data for component {component!r} in load case "
+                f"{loadcase_label!r} contains only non-finite values for element {ele}."
+            )
+        for tag, val in finite_pairs:
+            accum[tag].append(val)
 
     if averaging == "nodal":
         node_values = {tag: np.mean(vals) for tag, vals in accum.items()}
     else:
         # Fallback: nodal averaging (extensible for "none", "centroid")
         node_values = {tag: np.mean(vals) for tag, vals in accum.items()}
+
+    if not node_values:
+        raise ValueError(
+            f"No finite shell contour data found for component {component!r} "
+            f"in load case {loadcase_label!r}."
+        )
 
     return node_values, element_quads
 
@@ -669,6 +693,13 @@ def _extract_shell_stress_data(result_obj, component, loadcase=None):
     columns = _STRESS_COMP_COLUMNS[component]
     stresses = result_obj["stresses_shell"]
     ele_nodes = result_obj["ele_nodes_shell"]
+    loadcase_label = (
+        loadcase
+        if loadcase is not None
+        else str(result_obj.coords["Loadcase"].values[0])
+        if "Loadcase" in result_obj.coords
+        else "<default>"
+    )
 
     # Select loadcase
     if loadcase is not None:
@@ -688,7 +719,13 @@ def _extract_shell_stress_data(result_obj, component, loadcase=None):
 
         # Average across the 4 Gauss points for this element
         gp_vals = stresses.sel(Element=ele, Stress=columns).values.flatten()
-        ele_avg = float(np.nanmean(gp_vals))
+        finite_gp_vals = gp_vals[np.isfinite(gp_vals)]
+        if finite_gp_vals.size == 0:
+            raise ValueError(
+                f"Shell stress data for component {component!r} in load case "
+                f"{loadcase_label!r} contains only non-finite values for element {ele}."
+            )
+        ele_avg = float(np.mean(finite_gp_vals))
 
         # Assign element average to each of its nodes
         for tag in tags:
@@ -696,6 +733,11 @@ def _extract_shell_stress_data(result_obj, component, loadcase=None):
 
     # Average contributions from neighbouring elements at shared nodes
     node_values = {tag: float(np.mean(vals)) for tag, vals in accum.items()}
+    if not node_values:
+        raise ValueError(
+            f"No finite shell stress data found for component {component!r} "
+            f"in load case {loadcase_label!r}."
+        )
     return node_values, element_quads
 
 

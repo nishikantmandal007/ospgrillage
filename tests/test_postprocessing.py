@@ -1,5 +1,6 @@
 from ospgrillage import __version__ as version
 from fixtures import *
+import xarray as xr
 
 sys.path.insert(0, os.path.abspath("../"))
 
@@ -903,6 +904,60 @@ def test_extract_shell_contour_invalid_component(shell_link_bridge):
 
     with pytest.raises(ValueError, match="Unknown"):
         _extract_shell_contour_data(result, "Fxx")
+
+
+def test_extract_shell_contour_all_nan_raises():
+    """All-NaN shell contour data should raise a clear ValueError."""
+    from ospgrillage.postprocessing import _extract_shell_contour_data
+
+    result = xr.Dataset(
+        data_vars={
+            "forces_shell": xr.DataArray(
+                data=np.full((1, 1, 4), np.nan),
+                dims=("Loadcase", "Element", "Component"),
+                coords={
+                    "Loadcase": ["nan_case"],
+                    "Element": [1],
+                    "Component": ["Mx_i", "Mx_j", "Mx_k", "Mx_l"],
+                },
+            ),
+            "ele_nodes_shell": xr.DataArray(
+                data=np.array([[1, 2, 3, np.nan]]),
+                dims=("Element", "Nodes"),
+                coords={"Element": [1], "Nodes": ["i", "j", "k", "l"]},
+            ),
+        }
+    )
+
+    with pytest.raises(ValueError, match="non-finite values"):
+        _extract_shell_contour_data(result, "Mx", loadcase="nan_case")
+
+
+def test_extract_shell_stress_all_nan_raises():
+    """All-NaN shell stress data should raise a clear ValueError."""
+    from ospgrillage.postprocessing import _extract_shell_stress_data
+
+    result = xr.Dataset(
+        data_vars={
+            "stresses_shell": xr.DataArray(
+                data=np.full((1, 1, 4), np.nan),
+                dims=("Loadcase", "Element", "Stress"),
+                coords={
+                    "Loadcase": ["nan_case"],
+                    "Element": [1],
+                    "Stress": ["N11_gp1", "N11_gp2", "N11_gp3", "N11_gp4"],
+                },
+            ),
+            "ele_nodes_shell": xr.DataArray(
+                data=np.array([[1, 2, 3, np.nan]]),
+                dims=("Element", "Nodes"),
+                coords={"Element": [1], "Nodes": ["i", "j", "k", "l"]},
+            ),
+        }
+    )
+
+    with pytest.raises(ValueError, match="non-finite values"):
+        _extract_shell_stress_data(result, "N11", loadcase="nan_case")
 
 
 def test_triangulate_shell_mesh():

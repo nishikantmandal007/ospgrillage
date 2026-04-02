@@ -1400,6 +1400,19 @@ def test_path_get_custom_path_points_returns_correct_length():
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _assert_vehicle_shift(vehicle, *, origin_x, origin_z, shift_x, shift_z):
+    """Helper: first wheel should translate by the requested global shift."""
+    first_point = vehicle.compound_load_obj_list[0].load_point_1
+    assert first_point.x == pytest.approx(origin_x)
+    assert first_point.z == pytest.approx(origin_z)
+
+    vehicle.set_global_coord(og.Point(shift_x, 0, shift_z))
+
+    shifted_point = vehicle.compound_load_obj_list[0].load_point_1
+    assert shifted_point.x == pytest.approx(origin_x + shift_x)
+    assert shifted_point.z == pytest.approx(origin_z + shift_z)
+
+
 def test_load_model_m1600_creates_compound_load():
     """LoadModel.create() for M1600 must return a CompoundLoad with 24 point loads."""
     lm = og.LoadModel(model_type="M1600", gap=5.0)
@@ -1414,6 +1427,112 @@ def test_load_model_m1600_non_zero_loads():
     vehicle = lm.create()
     for point_load in vehicle.compound_load_obj_list:
         assert point_load.load_point_1.p > 0
+
+
+def test_load_model_class70r_creates_compound_load():
+    """LoadModel.create() for CLASS70R must return a 14-wheel CompoundLoad."""
+    vehicle = og.LoadModel(model_type="CLASS70R").create()
+    assert vehicle is not None
+    assert len(vehicle.compound_load_obj_list) == 14
+    for point_load in vehicle.compound_load_obj_list:
+        assert point_load.load_point_1.p > 0
+
+
+def test_load_model_class70r_global_shift():
+    """CLASS70R wheel coordinates should translate via set_global_coord()."""
+    vehicle = og.LoadModel(model_type="CLASS70R").create()
+    _assert_vehicle_shift(
+        vehicle,
+        origin_x=0.81,
+        origin_z=-0.965,
+        shift_x=3.0,
+        shift_z=4.0,
+    )
+
+
+def test_load_model_classa_creates_compound_load():
+    """LoadModel.create() for CLASSA must return a 16-wheel CompoundLoad."""
+    vehicle = og.LoadModel(model_type="CLASSA").create()
+    assert vehicle is not None
+    assert len(vehicle.compound_load_obj_list) == 16
+    for point_load in vehicle.compound_load_obj_list:
+        assert point_load.load_point_1.p > 0
+
+
+def test_load_model_classa_global_shift():
+    """CLASSA wheel coordinates should translate via set_global_coord()."""
+    vehicle = og.LoadModel(model_type="CLASSA").create()
+    _assert_vehicle_shift(
+        vehicle,
+        origin_x=0.6,
+        origin_z=-0.9,
+        shift_x=2.5,
+        shift_z=3.0,
+    )
+
+
+def test_irc_vehicle_analysis_smoke(bridge_model_42_negative):
+    """CLASSA and CLASS70R static load cases should analyse with finite results."""
+    og.ops.wipeAnalysis()
+    example_bridge = bridge_model_42_negative
+    beam_force_components = [
+        "Mx_i",
+        "Mx_j",
+        "My_i",
+        "My_j",
+        "Mz_i",
+        "Mz_j",
+        "Vx_i",
+        "Vx_j",
+        "Vy_i",
+        "Vy_j",
+        "Vz_i",
+        "Vz_j",
+    ]
+
+    for model_type, name, global_coord in [
+        ("CLASSA", "IRC ClassA", og.Point(3.0, 0.0, 3.5)),
+        ("CLASS70R", "IRC Class70R", og.Point(4.0, 0.0, 3.5)),
+    ]:
+        vehicle = og.LoadModel(model_type=model_type).create()
+        vehicle.set_global_coord(global_coord)
+        lc = og.create_load_case(name=name)
+        lc.add_load(vehicle)
+        example_bridge.add_load_case(lc)
+
+    example_bridge.analyze()
+    results = example_bridge.get_results()
+
+    loadcases = set(results.coords["Loadcase"].values.tolist())
+    assert {"IRC ClassA", "IRC Class70R"} <= loadcases
+
+    disp_y = np.array(results["displacements"].sel(Component="y").values, dtype=float)
+    assert np.all(np.isfinite(disp_y)), "Non-finite displacement values for IRC vehicles"
+
+    force_values = np.array(
+        results["forces"].sel(
+            Loadcase=["IRC ClassA", "IRC Class70R"],
+            Component=beam_force_components,
+        ).values,
+        dtype=float,
+    )
+    assert np.all(np.isfinite(force_values)), "Non-finite beam force values for IRC vehicles"
+
+
+def test_class70r_total_load_is_1000kN():
+    """Class 70R total axle load must equal 1000 kN per IRC 6-2017 Clause 204.1."""
+    vehicle = og.LoadModel(model_type="CLASS70R").create()
+    # Each axle load is split equally across 2 wheel positions; sum all point loads
+    total_N = sum(pl.load_point_1.p for pl in vehicle.compound_load_obj_list)
+    # total_N is the sum of per-wheel loads (each axle load / 2), so total = sum of all axle loads
+    assert abs(total_N - 1_000_000) < 1, f"Class 70R total load {total_N} N != 1000 kN"
+
+
+def test_classa_total_load_is_554kN():
+    """Class A total axle load must equal 554 kN per IRC 6-2017."""
+    vehicle = og.LoadModel(model_type="CLASSA").create()
+    total_N = sum(pl.load_point_1.p for pl in vehicle.compound_load_obj_list)
+    assert abs(total_N - 554_000) < 1, f"Class A total load {total_N} N != 554 kN"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
